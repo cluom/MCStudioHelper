@@ -106,13 +106,14 @@ class FileUtils {
             if (!windows) throw NotImplementedError("for now, only sudo for windows is implemented")
             var scriptContent = "@echo off\r\n"
             scriptContent += targetToLinks.joinToString("\r\n") { (target, link) ->
-                "mklink /D $link $target"
+                "mklink /D \"$link\" \"$target\""
             }
             val tempBatchFile = FileUtil.createTempFile("mcshelper", ".bat", true)
             FileUtil.writeToFile(tempBatchFile, scriptContent)
-            val commandLine = GeneralCommandLine(tempBatchFile.absolutePath)
-            val sudoCommand = ExecUtil.sudoCommand(commandLine, "插件需要管理员权限以配置系统环境")
-            val output = ExecUtil.execAndGetOutput(sudoCommand)
+            // 使用 power shell 以 Windows 标准的 UAC 提权方式运行
+            val psArgs = "Start-Process -FilePath '${tempBatchFile.absolutePath}' -Verb RunAs -Wait"
+            val commandLine = GeneralCommandLine("powershell", "-Command", psArgs)
+            val output = ExecUtil.execAndGetOutput(commandLine)
             if (output.exitCode != 0) {
                 logger.error("无法正确创建符号链接 (${output.exitCode})", output.stderrLines.joinToString("\n"))
             }
