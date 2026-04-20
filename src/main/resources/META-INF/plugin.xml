@@ -57,4 +57,12 @@
     <extensions defaultExtensionNs="com.intellij">
         <configurationType implementation="com.github.tartaricacid.mcshelper.MCRunConfigurationType"/>
     </extensions>
+    <actions>
+        <action id="mcshelper.ScanAndLink"
+                class="com.github.tartaricacid.mcshelper.ScanAndLinkAction"
+                text="扫描并链接为 MC 组件"
+                description="将目录（或其一级子目录）下的行为包 / 资源包链接到开发者启动器目录">
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+        </action>
+    </actions>
 </idea-plugin>

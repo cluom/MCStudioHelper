@@ -17,12 +17,38 @@ class PackUtils {
         /**
          * 在目录下查找 manifest 文件；优先使用 manifest.json，其次兼容 pack_manifest.json
          */
-        private fun findManifest(dir: Path): Path? {
+        fun findManifest(dir: Path): Path? {
             for (name in MANIFEST_NAMES) {
                 val p = dir.resolve(name)
                 if (Files.isRegularFile(p)) return p
             }
             return null
+        }
+
+        /**
+         * 为右键"扫描并链接"使用的扫描：
+         * - 若当前目录本身含 manifest，只返回当前目录对应的一个包
+         * - 否则扫描子目录（深度 1），对每个含 manifest 的子目录收集
+         */
+        fun scanForLinking(dir: Path): List<PackInfo> {
+            findManifest(dir)?.let { manifest ->
+                val info = parseManifest(manifest)
+                return if (info != null) listOf(info) else emptyList()
+            }
+            val result = mutableListOf<PackInfo>()
+            try {
+                Files.list(dir).use { stream ->
+                    stream.forEach { sub ->
+                        if (!Files.isDirectory(sub)) return@forEach
+                        val manifest = findManifest(sub) ?: return@forEach
+                        val info = parseManifest(manifest)
+                        if (info != null) result.add(info)
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("scanForLinking: 扫描 $dir 失败：${e.message}")
+            }
+            return result
         }
 
         /**
