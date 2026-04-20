@@ -32,27 +32,44 @@ class ConfigRunTask {
                 throw ExecutionException("启动程序路径错误：${config.gameExecutablePath}")
             }
 
-            // 清空符号链接
-            FileUtils.removeSymlinks(PathUtils.behaviorPacksDir())
-            FileUtils.removeSymlinks(PathUtils.resourcePacksDir())
-
-            // 先把当前项目加入
-            val packMaps: EnumMap<PackType, MutableList<PackInfo>> = Maps.newEnumMap(PackType::class.java)
+            // 先扫描项目包
+            val projectPackMap: EnumMap<PackType, MutableList<PackInfo>> = Maps.newEnumMap(PackType::class.java)
             val projectPath = project.basePath ?: throw ExecutionException("当前项目路径为空")
-            val projectIsFound = PackUtils.parsePack(Paths.get(projectPath), packMaps)
+            val projectIsFound = PackUtils.parsePack(Paths.get(projectPath), projectPackMap)
             if (!projectIsFound) {
                 throw ExecutionException("当前项目不包含有效的资源包或行为包")
             }
 
-            // 再把额外添加的包加入
-            for (extraPackPath in config.includedModDirs) {
-                val extraPath = Paths.get(extraPackPath)
-                val found = PackUtils.parsePack(extraPath, packMaps)
-                // 额外的包导入失败，弹出提示
-                if (!found) {
-                    throw ExecutionException("目录 \"$extraPackPath\" 不包含有效的资源包或行为包")
+            // 在清空符号链接之前，先扫描外部组件（behavior_packs / resource_packs 目录）
+            // 注意 scanPacksInDirs 的 path 字段会解析到真实源目录，用于后续重建符号链接
+            val externalPacks = PackUtils.scanPacksInDirs(
+                PathUtils.behaviorPacksDir(),
+                PathUtils.resourcePacksDir()
+            )
+
+            // 根据勾选状态过滤包
+            val uncheckedProject = config.uncheckedProjectPackNames.toSet()
+            val checkedExternal = config.checkedExternalPackNames.toSet()
+            val projectPackNames = projectPackMap.values.flatten().map { it.name }.toSet()
+
+            val packMaps: EnumMap<PackType, MutableList<PackInfo>> = Maps.newEnumMap(PackType::class.java)
+            // 项目包：默认全勾，过滤掉反勾的
+            for ((type, list) in projectPackMap) {
+                for (pack in list) {
+                    if (pack.name in uncheckedProject) continue
+                    packMaps.getOrPut(type) { mutableListOf() }.add(pack)
                 }
             }
+            // 外部包：默认全不勾，仅保留勾选的；若与项目包 name 相同则视为本项目、跳过
+            for (pack in externalPacks) {
+                if (pack.name in projectPackNames) continue
+                if (pack.name !in checkedExternal) continue
+                packMaps.getOrPut(pack.type) { mutableListOf() }.add(pack)
+            }
+
+            // 清空符号链接
+            FileUtils.removeSymlinks(PathUtils.behaviorPacksDir())
+            FileUtils.removeSymlinks(PathUtils.resourcePacksDir())
 
             // 创建符号链接
             val sudoRequiredSymlinks = mutableSetOf<Pair<Path, Path>>()
@@ -66,7 +83,11 @@ class ConfigRunTask {
                 }
                 for (pack in packList) {
                     val target = pack.path
-                    val link = targetDir.resolve(pack.uuid)
+                    val link = targetDir.resolve(pack.path.fileName.toString())
+                    // 若源路径与目标位置重合（外部包是真实目录、本身就放在 behavior_packs/resource_packs 里），无需建链
+                    if (target.toAbsolutePath().normalize() == link.toAbsolutePath().normalize()) {
+                        continue
+                    }
                     if (!FileUtils.createSymlink(target, link)) {
                         sudoRequiredSymlinks += target to link
                     }

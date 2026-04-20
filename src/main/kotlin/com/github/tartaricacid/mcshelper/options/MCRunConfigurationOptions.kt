@@ -8,7 +8,13 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     private val gameExecutablePathProperty = string("").provideDelegate(this, "gameExecutablePath")
 
     private val logLevelProperty = enum(LogLevel.NORMAL).provideDelegate(this, "logLevel")
-    private val includedModDirsProperty = list<String>().provideDelegate(this, "includedModDirs")
+
+    // 项目内组件：默认全部勾选，此列表保存被显式反勾的包名
+    private val uncheckedProjectPackNamesProperty =
+        list<String>().provideDelegate(this, "uncheckedProjectPackNames")
+    // 外部组件：默认全部不勾选，此列表保存被显式勾选的包名
+    private val checkedExternalPackNamesProperty =
+        list<String>().provideDelegate(this, "checkedExternalPackNames")
 
     private val worldFolderNameProperty = string(UUID.randomUUID().toString()).provideDelegate(this, "worldFolderName")
     private val worldSeedProperty = property(Random.nextLong()).provideDelegate(this, "worldSeed")
@@ -30,10 +36,16 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
         get() = logLevelProperty.getValue(this)
         set(level) = logLevelProperty.setValue(this, level)
 
-    var includedModDirs: MutableList<String>
-        get() = includedModDirsProperty.getValue(this)
+    var uncheckedProjectPackNames: MutableList<String>
+        get() = uncheckedProjectPackNamesProperty.getValue(this)
         set(list) {
-            includedModDirsProperty.setValue(this, list)
+            uncheckedProjectPackNamesProperty.setValue(this, list)
+        }
+
+    var checkedExternalPackNames: MutableList<String>
+        get() = checkedExternalPackNamesProperty.getValue(this)
+        set(list) {
+            checkedExternalPackNamesProperty.setValue(this, list)
         }
 
     var worldFolderName: String

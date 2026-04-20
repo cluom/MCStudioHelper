@@ -1,7 +1,7 @@
 <idea-plugin>
-    <id>com.github.tartaricacid.mcshelper</id>
-    <name>MC Studio Helper</name>
-    <vendor email="baka943@qq.com" url="https://github.com/TartaricAcid">TartaricAcid</vendor>
+    <id>com.github.tartaricacid.mcshelper.cluom-fork</id>
+    <name>MC Studio Helper (cluom fork)</name>
+    <vendor email="cluom.us@outlook.com">cluom</vendor>
     <description><![CDATA[
     <div>
       <h2>MC Studio Helper</h2>

@@ -98,13 +98,13 @@ class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MC
             )
         }
 
-        val includedModsText = if (options.includedModDirs.isEmpty()) {
+        val externalPacksText = if (options.checkedExternalPackNames.isEmpty()) {
             "无"
         } else {
-            options.includedModDirs.joinToString(", ")
+            options.checkedExternalPackNames.joinToString(", ")
         }
         myAnsiEscapeDecoder.escapeText(
-            "${header}包含组件目录：$includedModsText$RESET\n",
+            "${header}额外加载外部组件：$externalPacksText$RESET\n",
             ProcessOutputTypes.STDOUT, this
         )
 
@@ -146,7 +146,7 @@ class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MC
 
         // 依据日志等级处理
         line = if (options.logLevel == LogLevel.VERBOSE) {
-            handleVerboseLog(line) ?: return
+            handleVerboseLog(line)
         } else {
             handleNormalLog(line) ?: return
         }
@@ -162,7 +162,7 @@ class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MC
         try {
             for ((outputType, sb) in buffers) {
                 if (sb.isNotEmpty()) {
-                    var line = sb.toString().trim()
+                    val line = sb.toString().trim()
                     myAnsiEscapeDecoder.escapeText(line + "\n", outputType, this)
                 }
             }
@@ -233,7 +233,7 @@ class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MC
         return "$coloredLevel$trimLine$RESET"
     }
 
-    fun handleVerboseLog(line: String): String? {
+    fun handleVerboseLog(line: String): String {
         val sysLogMatch = SYS_LOG.find(line)
         if (sysLogMatch != null) {
             val level = sysLogMatch.groupValues[2]

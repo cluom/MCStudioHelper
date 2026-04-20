@@ -10,8 +10,6 @@ plugins {
 group = "com.github.tartaricacid.mcshelper"
 version = "1.1.0"
 
-fun environment(key: String) = providers.environmentVariable(key)
-
 repositories {
     mavenCentral()
     intellijPlatform {
@@ -39,16 +37,6 @@ intellijPlatform {
     }
 
     buildSearchableOptions = false
-
-    signing {
-        certificateChain = environment("JB_CERTIFICATE_CHAIN")
-        privateKey = environment("JB_PRIVATE_KEY")
-        password = environment("JB_PRIVATE_KEY_PASSWORD")
-    }
-
-    publishing {
-        token = environment("JB_PUBLISH_TOKEN")
-    }
 }
 
 tasks {
