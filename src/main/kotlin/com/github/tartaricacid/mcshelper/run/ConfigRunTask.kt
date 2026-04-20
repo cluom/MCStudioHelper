@@ -162,6 +162,35 @@ class ConfigRunTask {
             builder.putBoolean("dodaylightcycle", config.doDaylightCycle)
             // 是否进行天气循环
             builder.putBoolean("doweathercycle", config.doWeatherCycle)
+            // 是否显示坐标
+            builder.putBoolean("showcoordinates", config.showCoordinates)
+            // 默认玩家权限（0 访客 / 1 成员 / 2 操作员）
+            builder.putInt("playerPermissionsLevel", config.playerPermissionsLevel.code)
+            builder.putInt("permissionsLevel", config.playerPermissionsLevel.code)
+
+            // 超平坦模式下写入层配置；空列表兜底为单层 minecraft:air
+            if (config.levelType == com.github.tartaricacid.mcshelper.options.LevelType.FLAT) {
+                val blockLayers = config.flatWorldLayers.mapNotNull { entry ->
+                    val parts = entry.split("=", limit = 2)
+                    if (parts.size != 2) return@mapNotNull null
+                    val name = parts[0].trim()
+                    val count = parts[1].trim().toIntOrNull() ?: return@mapNotNull null
+                    if (name.isEmpty() || count <= 0) return@mapNotNull null
+                    mapOf("block_name" to name, "count" to count)
+                }.ifEmpty {
+                    listOf(mapOf("block_name" to "minecraft:air", "count" to 1))
+                }
+                val flatJson = Gson().toJson(
+                    linkedMapOf(
+                        "biome_id" to 1,
+                        "block_layers" to blockLayers,
+                        "encoding_version" to 6,
+                        "structure_options" to null,
+                        "world_version" to "version.post_1_18"
+                    )
+                )
+                builder.putString("FlatWorldLayers", flatJson)
+            }
 
             // 写回 level.dat
             try {

@@ -3,6 +3,7 @@ package com.github.tartaricacid.mcshelper.gui
 import com.github.tartaricacid.mcshelper.options.GameMode
 import com.github.tartaricacid.mcshelper.options.LevelType
 import com.github.tartaricacid.mcshelper.options.LogLevel
+import com.github.tartaricacid.mcshelper.options.PlayerPermissionLevel
 import com.github.tartaricacid.mcshelper.run.MCRunConfiguration
 import com.github.tartaricacid.mcshelper.util.FileUtils
 import com.github.tartaricacid.mcshelper.util.PackUtils
@@ -60,6 +61,22 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
     companion object {
         private const val WORLD_CARD_EDIT = "edit"
         private const val WORLD_CARD_VIEW = "view"
+
+        private val DEFAULT_FLAT_LAYERS = listOf(
+            "minecraft:bedrock=1",
+            "minecraft:dirt=2",
+            "minecraft:grass=1"
+        )
+
+        /** 解析 "blockName=count"，返回 (blockName, count) 或 null */
+        fun parseLayerEntry(entry: String): Pair<String, Int>? {
+            val parts = entry.split("=", limit = 2)
+            if (parts.size != 2) return null
+            val name = parts[0].trim()
+            val count = parts[1].trim().toIntOrNull() ?: return null
+            if (name.isEmpty() || count <= 0) return null
+            return name to count
+        }
     }
 
     private lateinit var worldSeedField: JBTextField
@@ -67,6 +84,15 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
 
     private lateinit var gameModeField: ComboBox<GameMode>
     private lateinit var levelTypeField: ComboBox<LevelType>
+    private lateinit var playerPermissionsLevelField: ComboBox<PlayerPermissionLevel>
+    private lateinit var showCoordinatesField: JBCheckBox
+
+    private lateinit var flatLayersPreviewTable: com.intellij.ui.table.JBTable
+    private lateinit var flatLayersPreviewModel: javax.swing.table.DefaultTableModel
+    private lateinit var flatLayersLabelRow: com.intellij.ui.dsl.builder.Row
+    private lateinit var flatLayersTableRow: com.intellij.ui.dsl.builder.Row
+    // NBT 顺序存（自底向上），每项 "blockName=count"
+    private var flatLayersCurrent: MutableList<String> = mutableListOf()
 
     private lateinit var enableCheatsField: JBCheckBox
     private lateinit var keepInventoryField: JBCheckBox
@@ -165,10 +191,52 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
                     }
 
                     row {
+                        playerPermissionsLevelField = comboBox(
+                            EnumComboBoxModel(PlayerPermissionLevel::class.java),
+                            textListCellRenderer { it?.displayName }
+                        ).label("默认玩家权限：").component
+                    }
+
+                    row {
                         enableCheatsField = checkBox("启用作弊").component
                         keepInventoryField = checkBox("死亡不掉落").component
                         doDaylightCycleField = checkBox("昼夜循环").component
                         doWeatherCycleField = checkBox("天气变化").component
+                        showCoordinatesField = checkBox("显示坐标").component
+                    }
+
+                    // 主面板：只读表格预览 + 编辑按钮；实际编辑走独立 DialogWrapper 弹窗
+                    // 只读 JBTable 不进入 editing，不会被 transferFocus 抢焦点
+                    flatLayersPreviewModel = object : javax.swing.table.DefaultTableModel(arrayOf("方块名", "层数"), 0) {
+                        override fun isCellEditable(row: Int, column: Int) = false
+                    }
+                    flatLayersPreviewTable = com.intellij.ui.table.JBTable(flatLayersPreviewModel)
+                    flatLayersPreviewTable.setShowGrid(true)
+                    flatLayersPreviewTable.rowSelectionAllowed = false
+                    flatLayersPreviewTable.columnSelectionAllowed = false
+                    flatLayersPreviewTable.cellSelectionEnabled = false
+                    flatLayersPreviewTable.emptyText.text = "无层，运行时将生成单层 minecraft:air"
+                    flatLayersPreviewTable.columnModel.getColumn(1).preferredWidth = 60
+                    flatLayersPreviewTable.columnModel.getColumn(1).maxWidth = 100
+
+                    flatLayersLabelRow = row("超平坦层：") {
+                        val editBtn = JButton("编辑...").apply {
+                            addActionListener { openFlatLayersEditor() }
+                        }
+                        cell(editBtn)
+                    }
+                    flatLayersTableRow = row {
+                        val scroll = JBScrollPane(flatLayersPreviewTable).apply {
+                            preferredSize = java.awt.Dimension(400, 160)
+                        }
+                        cell(scroll).align(Align.FILL).comment("自上而下 = 世界自顶到底")
+                    }
+
+                    // 世界类型切换时联动显隐（label 行 + 表格行）
+                    levelTypeField.addActionListener {
+                        val visible = levelTypeField.selectedItem == LevelType.FLAT
+                        flatLayersLabelRow.visible(visible)
+                        flatLayersTableRow.visible(visible)
                     }
                 }
             }.expanded = true
@@ -224,6 +292,20 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         keepInventoryField.isSelected = config.options.keepInventory
         doDaylightCycleField.isSelected = config.options.doDaylightCycle
         doWeatherCycleField.isSelected = config.options.doWeatherCycle
+        showCoordinatesField.isSelected = config.options.showCoordinates
+        playerPermissionsLevelField.selectedItem = config.options.playerPermissionsLevel
+
+        // 首次使用（dirty=false 且存储为空）填示例，否则按存储填
+        val layers = config.options.flatWorldLayers
+        flatLayersCurrent = if (!config.options.flatWorldLayersDirty && layers.isEmpty()) {
+            DEFAULT_FLAT_LAYERS.toMutableList()
+        } else {
+            layers.toMutableList()
+        }
+        refreshFlatLayersPreview()
+        val flatVisible = config.options.levelType == LevelType.FLAT
+        flatLayersLabelRow.visible(flatVisible)
+        flatLayersTableRow.visible(flatVisible)
     }
 
     override fun applyEditorTo(config: MCRunConfiguration) {
@@ -271,10 +353,125 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         config.options.gameMode = gameModeField.selectedItem as GameMode
         config.options.levelType = levelTypeField.selectedItem as LevelType
 
+        // 超平坦层直接从已维护的 flatLayersCurrent（NBT 顺序）写回
+        config.options.flatWorldLayers = flatLayersCurrent.toMutableList()
+        config.options.flatWorldLayersDirty = true
+
         config.options.enableCheats = enableCheatsField.isSelected
         config.options.keepInventory = keepInventoryField.isSelected
         config.options.doDaylightCycle = doDaylightCycleField.isSelected
         config.options.doWeatherCycle = doWeatherCycleField.isSelected
+        config.options.showCoordinates = showCoordinatesField.isSelected
+        config.options.playerPermissionsLevel = playerPermissionsLevelField.selectedItem as PlayerPermissionLevel
+    }
+
+    private fun refreshFlatLayersPreview() {
+        // UI 预览自上而下（顶 → 底），NBT 顺序自底向上，需反转
+        flatLayersPreviewModel.rowCount = 0
+        for (entry in flatLayersCurrent.asReversed()) {
+            val (n, c) = parseLayerEntry(entry) ?: continue
+            flatLayersPreviewModel.addRow(arrayOf<Any>(n, c.toString()))
+        }
+    }
+
+    private fun openFlatLayersEditor() {
+        val dialog = FlatLayersEditorDialog(flatLayersCurrent)
+        if (dialog.showAndGet()) {
+            flatLayersCurrent = dialog.getResult().toMutableList()
+            refreshFlatLayersPreview()
+        }
+    }
+
+    /**
+     * 独立弹窗，用 JBTable 编辑超平坦层。
+     * 位于 DialogWrapper 下，不受 Kotlin UI DSL DialogPanel 的 focus traversal 影响。
+     */
+    private class FlatLayersEditorDialog(initial: List<String>) : com.intellij.openapi.ui.DialogWrapper(true) {
+        private val model = javax.swing.table.DefaultTableModel(arrayOf("方块名", "层数"), 0)
+        private val table = com.intellij.ui.table.JBTable(model)
+
+        init {
+            title = "编辑超平坦层"
+            // UI 顺序（自上而下）与 NBT 相反
+            for (entry in initial.asReversed()) {
+                val (n, c) = parseLayerEntry(entry) ?: continue
+                model.addRow(arrayOf<Any>(n, c.toString()))
+            }
+            table.setShowGrid(true)
+            table.columnModel.getColumn(1).preferredWidth = 60
+            table.columnModel.getColumn(1).maxWidth = 100
+            init()
+        }
+
+        override fun createCenterPanel(): JComponent {
+            val toolbar = com.intellij.ui.ToolbarDecorator.createDecorator(table)
+                .setAddAction {
+                    if (table.isEditing) table.cellEditor?.stopCellEditing()
+                    model.addRow(arrayOf<Any>("minecraft:stone", "1"))
+                }
+                .setRemoveAction {
+                    if (table.isEditing) table.cellEditor?.stopCellEditing()
+                    for (r in table.selectedRows.sortedDescending()) model.removeRow(r)
+                }
+                .setMoveUpAction {
+                    if (table.isEditing) table.cellEditor?.stopCellEditing()
+                    val r = table.selectedRow
+                    if (r > 0) {
+                        model.moveRow(r, r, r - 1)
+                        table.selectionModel.setSelectionInterval(r - 1, r - 1)
+                    }
+                }
+                .setMoveDownAction {
+                    if (table.isEditing) table.cellEditor?.stopCellEditing()
+                    val r = table.selectedRow
+                    if (r in 0 until model.rowCount - 1) {
+                        model.moveRow(r, r, r + 1)
+                        table.selectionModel.setSelectionInterval(r + 1, r + 1)
+                    }
+                }
+                .addExtraAction(object : com.intellij.openapi.actionSystem.AnAction(
+                    "一键清空",
+                    "清空所有超平坦层",
+                    AllIcons.Actions.GC
+                ) {
+                    override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+                    override fun update(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+                        e.presentation.isEnabled = model.rowCount > 0
+                    }
+                    override fun actionPerformed(e: com.intellij.openapi.actionSystem.AnActionEvent) {
+                        if (table.isEditing) table.cellEditor?.stopCellEditing()
+                        model.rowCount = 0
+                    }
+                })
+                .setPreferredSize(java.awt.Dimension(400, 240))
+                .createPanel()
+            val panel = JPanel(BorderLayout())
+            panel.add(toolbar, BorderLayout.CENTER)
+            val hint = javax.swing.JLabel(
+                "<html>" +
+                    "自上而下 = 世界自顶到底<br/>" +
+                    "⚠ 基岩版引擎会忽略『仅有单层实体方块』的超平坦配置并回退默认地形，建议至少保留 2 层<br/>" +
+                    "全部删除后运行时将兜底生成单层 minecraft:air" +
+                    "</html>"
+            )
+            hint.border = javax.swing.BorderFactory.createEmptyBorder(4, 4, 0, 4)
+            panel.add(hint, BorderLayout.SOUTH)
+            return panel
+        }
+
+        /** 返回 NBT 顺序（自底向上）的列表 */
+        fun getResult(): List<String> {
+            if (table.isEditing) table.cellEditor?.stopCellEditing()
+            val uiRows = mutableListOf<String>()
+            for (i in 0 until model.rowCount) {
+                val name = model.getValueAt(i, 0)?.toString()?.trim().orEmpty()
+                val count = model.getValueAt(i, 1)?.toString()?.trim()?.toIntOrNull() ?: 0
+                if (name.isNotEmpty() && count > 0) {
+                    uiRows += "$name=$count"
+                }
+            }
+            return uiRows.asReversed()
+        }
     }
 
     private fun openWorldFolderInExplorer() {

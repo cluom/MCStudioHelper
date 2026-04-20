@@ -23,10 +23,18 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     private val gameModeProperty = enum(GameMode.CREATIVE).provideDelegate(this, "gameMode")
     private val levelTypeProperty = enum(LevelType.DEFAULT).provideDelegate(this, "levelType")
 
+    // 超平坦层配置，每项编码为 "blockName=count"，自下而上
+    private val flatWorldLayersProperty = list<String>().provideDelegate(this, "flatWorldLayers")
+    // 用户是否显式保存过超平坦层（区分"从未配置"与"主动清空"）
+    private val flatWorldLayersDirtyProperty = property(false).provideDelegate(this, "flatWorldLayersDirty")
+
     private val enableCheatsProperty = property(true).provideDelegate(this, "enableCheats")
     private val keepInventoryProperty = property(false).provideDelegate(this, "keepInventory")
     private val doDaylightCycleProperty = property(true).provideDelegate(this, "doDaylightCycle")
     private val doWeatherCycleProperty = property(true).provideDelegate(this, "doWeatherCycle")
+    private val showCoordinatesProperty = property(true).provideDelegate(this, "showCoordinates")
+    private val playerPermissionsLevelProperty =
+        enum(PlayerPermissionLevel.OPERATOR).provideDelegate(this, "playerPermissionsLevel")
 
     var gameExecutablePath: String?
         get() = gameExecutablePathProperty.getValue(this)
@@ -68,6 +76,16 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
         get() = levelTypeProperty.getValue(this)
         set(value) = levelTypeProperty.setValue(this, value)
 
+    var flatWorldLayers: MutableList<String>
+        get() = flatWorldLayersProperty.getValue(this)
+        set(value) {
+            flatWorldLayersProperty.setValue(this, value)
+        }
+
+    var flatWorldLayersDirty: Boolean
+        get() = flatWorldLayersDirtyProperty.getValue(this)
+        set(value) = flatWorldLayersDirtyProperty.setValue(this, value)
+
     var enableCheats: Boolean
         get() = enableCheatsProperty.getValue(this)
         set(value) = enableCheatsProperty.setValue(this, value)
@@ -83,4 +101,12 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     var doWeatherCycle: Boolean
         get() = doWeatherCycleProperty.getValue(this)
         set(value) = doWeatherCycleProperty.setValue(this, value)
+
+    var showCoordinates: Boolean
+        get() = showCoordinatesProperty.getValue(this)
+        set(value) = showCoordinatesProperty.setValue(this, value)
+
+    var playerPermissionsLevel: PlayerPermissionLevel
+        get() = playerPermissionsLevelProperty.getValue(this)
+        set(value) = playerPermissionsLevelProperty.setValue(this, value)
 }
