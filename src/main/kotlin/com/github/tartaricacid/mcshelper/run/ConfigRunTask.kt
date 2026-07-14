@@ -67,12 +67,8 @@ class ConfigRunTask {
                 packMaps.getOrPut(pack.type) { mutableListOf() }.add(pack)
             }
 
-            // 清空符号链接
-            FileUtils.removeSymlinks(PathUtils.behaviorPacksDir())
-            FileUtils.removeSymlinks(PathUtils.resourcePacksDir())
-
-            // 创建符号链接
-            val sudoRequiredSymlinks = mutableSetOf<Pair<Path, Path>>()
+            // 计算期望的 symlink 集合 (target -> link)；外部包源路径与目标位置重合的不需要建链
+            val desiredPairs = mutableListOf<Pair<Path, Path>>()
             for ((type, packList) in packMaps) {
                 val targetDir = when (type) {
                     PackType.BEHAVIOR -> PathUtils.behaviorPacksDir()
@@ -84,19 +80,37 @@ class ConfigRunTask {
                 for (pack in packList) {
                     val target = pack.path
                     val link = targetDir.resolve(pack.path.fileName.toString())
-                    // 若源路径与目标位置重合（外部包是真实目录、本身就放在 behavior_packs/resource_packs 里），无需建链
                     if (target.toAbsolutePath().normalize() == link.toAbsolutePath().normalize()) {
                         continue
                     }
-                    if (!FileUtils.createSymlink(target, link)) {
-                        sudoRequiredSymlinks += target to link
-                    }
+                    desiredPairs += target to link
                 }
             }
 
-            // 如有需提权的符号链接，则合并提权创建
+            // 调和符号链接：只清理本项目过期链接，保留其他项目 / 手动建立的链接；正确指向的链接原样保留
+            val projectRoot = Paths.get(projectPath)
+            val desiredLinkToTarget = desiredPairs.associate { it.second to it.first }
+            FileUtils.reconcileSymlinks(PathUtils.behaviorPacksDir(), projectRoot, desiredLinkToTarget)
+            FileUtils.reconcileSymlinks(PathUtils.resourcePacksDir(), projectRoot, desiredLinkToTarget)
+
+            // 创建缺失的符号链接（已正确指向的会被 createSymlink 内部短路跳过）
+            val sudoRequiredSymlinks = mutableSetOf<Pair<Path, Path>>()
+            for ((target, link) in desiredPairs) {
+                if (!FileUtils.createSymlink(target, link)) {
+                    sudoRequiredSymlinks += target to link
+                }
+            }
+
+            // 如有需提权的符号链接，则合并提权创建（sudoCreateSymlinks 内部使用 -Wait 同步等待 UAC 进程结束）
             if (sudoRequiredSymlinks.isNotEmpty()) {
                 FileUtils.sudoCreateSymlinks(sudoRequiredSymlinks.toList())
+            }
+
+            // 启动游戏前校验所有期望链接已就位，未就位则拒绝启动避免游戏读到不一致状态
+            val missingSymlinks = FileUtils.verifySymlinks(desiredPairs)
+            if (missingSymlinks.isNotEmpty()) {
+                val detail = missingSymlinks.joinToString("\n") { (t, l) -> "  $l -> $t" }
+                throw ExecutionException("符号链接创建未完成，无法启动游戏。缺失：\n$detail")
             }
 
             // 解压（强制覆盖）测试模组

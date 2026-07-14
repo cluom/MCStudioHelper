@@ -58,15 +58,56 @@ class FileUtils {
         }
 
         /**
-         * 清理行为包目录下所有符号链接
+         * 协调指定目录下的符号链接，只清理"属于本项目"的过期链接，不影响外部 / 其他项目建立的链接：
+         *  - 若 link 在 desiredLinkToTarget 中且已正确指向期望 target → 保留
+         *  - 若 link 在 desiredLinkToTarget 中但目标不对，且当前指向 ownedRoot 内（属于本项目过期链接）→ 删除让后续重建
+         *  - 若 link 不在 desiredLinkToTarget 中，且当前指向 ownedRoot 内 → 删除（清理过期）
+         *  - 其他（外部目标 / 悬挂链接 / 非 symlink）→ 保留，不动
          */
-        fun removeSymlinks(dir: Path?) {
-            val removeDir = dir ?: return
-            Files.list(removeDir).use { paths ->
+        fun reconcileSymlinks(dir: Path?, ownedRoot: Path, desiredLinkToTarget: Map<Path, Path>) {
+            val targetDir = dir ?: return
+            val ownedReal = try {
+                ownedRoot.toRealPath()
+            } catch (_: Exception) {
+                ownedRoot.toAbsolutePath().normalize()
+            }
+            val desiredNormalized = desiredLinkToTarget.mapKeys { it.key.toAbsolutePath().normalize() }
+            Files.list(targetDir).use { paths ->
                 paths.forEach { path ->
-                    if (Files.isSymbolicLink(path)) {
+                    if (!Files.isSymbolicLink(path)) return@forEach
+                    val pathNorm = path.toAbsolutePath().normalize()
+                    val isProjectOwned = try {
+                        path.toRealPath().startsWith(ownedReal)
+                    } catch (_: Exception) {
+                        false
+                    }
+                    val expectedTarget = desiredNormalized[pathNorm]
+                    if (expectedTarget != null) {
+                        val isCorrect = try {
+                            Files.isSameFile(path, expectedTarget)
+                        } catch (_: Exception) {
+                            false
+                        }
+                        if (isCorrect) return@forEach
+                        if (isProjectOwned) {
+                            Files.deleteIfExists(path)
+                        }
+                    } else if (isProjectOwned) {
                         Files.deleteIfExists(path)
                     }
+                }
+            }
+        }
+
+        /**
+         * 校验给定 (target, link) 对应的符号链接是否都已就位且指向正确，返回未就绪列表。
+         */
+        fun verifySymlinks(pairs: List<Pair<Path, Path>>): List<Pair<Path, Path>> {
+            return pairs.filter { (target, link) ->
+                try {
+                    !(Files.isSymbolicLink(link) && Files.isSameFile(link, target))
+                } catch (_: Exception) {
+                    true
                 }
             }
         }
