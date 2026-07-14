@@ -29,7 +29,6 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     private val flatWorldLayersDirtyProperty = property(false).provideDelegate(this, "flatWorldLayersDirty")
 
     private val enableCheatsProperty = property(true).provideDelegate(this, "enableCheats")
-    private val bonusChestEnabledProperty = property(false).provideDelegate(this, "bonusChestEnabled")
     private val keepInventoryProperty = property(false).provideDelegate(this, "keepInventory")
     private val doDaylightCycleProperty = property(true).provideDelegate(this, "doDaylightCycle")
     private val doWeatherCycleProperty = property(true).provideDelegate(this, "doWeatherCycle")
@@ -90,10 +89,6 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     var enableCheats: Boolean
         get() = enableCheatsProperty.getValue(this)
         set(value) = enableCheatsProperty.setValue(this, value)
-
-    var bonusChestEnabled: Boolean
-        get() = bonusChestEnabledProperty.getValue(this)
-        set(value) = bonusChestEnabledProperty.setValue(this, value)
 
     var keepInventory: Boolean
         get() = keepInventoryProperty.getValue(this)
