@@ -156,6 +156,8 @@ class ConfigRunTask {
             builder.putInt("Generator", config.levelType.code)
             // 是否允许作弊
             builder.putBoolean("cheatsEnabled", config.enableCheats)
+            // 是否生成开局奖励箱
+            builder.putBoolean("bonusChestEnabled", config.bonusChestEnabled)
             // 保留物品栏
             builder.putBoolean("keepInventory", config.keepInventory)
             // 是否进行昼夜循环

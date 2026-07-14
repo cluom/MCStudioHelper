@@ -95,6 +95,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
     private var flatLayersCurrent: MutableList<String> = mutableListOf()
 
     private lateinit var enableCheatsField: JBCheckBox
+    private lateinit var bonusChestEnabledField: JBCheckBox
     private lateinit var keepInventoryField: JBCheckBox
     private lateinit var doDaylightCycleField: JBCheckBox
     private lateinit var doWeatherCycleField: JBCheckBox
@@ -199,6 +200,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
 
                     row {
                         enableCheatsField = checkBox("启用作弊").component
+                        bonusChestEnabledField = checkBox("开局奖励箱").component
                         keepInventoryField = checkBox("死亡不掉落").component
                         doDaylightCycleField = checkBox("昼夜循环").component
                         doWeatherCycleField = checkBox("天气变化").component
@@ -289,6 +291,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         levelTypeField.selectedItem = config.options.levelType
 
         enableCheatsField.isSelected = config.options.enableCheats
+        bonusChestEnabledField.isSelected = config.options.bonusChestEnabled
         keepInventoryField.isSelected = config.options.keepInventory
         doDaylightCycleField.isSelected = config.options.doDaylightCycle
         doWeatherCycleField.isSelected = config.options.doWeatherCycle
@@ -358,6 +361,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         config.options.flatWorldLayersDirty = true
 
         config.options.enableCheats = enableCheatsField.isSelected
+        config.options.bonusChestEnabled = bonusChestEnabledField.isSelected
         config.options.keepInventory = keepInventoryField.isSelected
         config.options.doDaylightCycle = doDaylightCycleField.isSelected
         config.options.doWeatherCycle = doWeatherCycleField.isSelected
