@@ -58,6 +58,7 @@ val GAME_LOG = Regex(
 )
 
 const val PYTHON_HEADER = "[Python]"
+const val MOD_HELPER_HEADER = "[mc_helper]"
 
 class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MCRunConfigurationOptions) :
     KillableProcessHandler(commandLine), AnsiEscapeDecoder.ColoredTextAcceptor {
@@ -183,25 +184,38 @@ class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MC
     }
 
     /**
-     * 普通情况下，仅显示 Python 输出的日志内容
+     * 普通情况下，仅显示 Python 输出的日志内容；带 [mc_helper] 标记的 mod 自定义日志也一并展示
      */
     fun handleNormalLog(lineInput: String): String? {
         var line = lineInput
 
         // 由于 [ERROR][Engine] 往往先于 [Python] 头的添加，故检查到含有 [ERROR][Engine] 时，需要手动添加
-        if (lineInput.contains("[ERROR][Engine]") && !lineInput.startsWith(PYTHON_HEADER)) {
-            line = "$PYTHON_HEADER $lineInput"
+        if (line.contains("[ERROR][Engine]") && !line.startsWith(PYTHON_HEADER)) {
+            line = "$PYTHON_HEADER $line"
+        }
+
+        val hasModHelper = line.contains(MOD_HELPER_HEADER)
+        // 既不是 [Python] 输出，也不是 [mc_helper] 标记的 mod 日志，过滤
+        if (!line.startsWith(PYTHON_HEADER) && !hasModHelper) {
+            return null
+        }
+
+        // [mc_helper] 是识别 mod 自定义 logger 的标记，展示时一律剥掉（含 [Python] [mc_helper]... 嵌套形态）
+        if (hasModHelper) {
+            line = line.replace(MOD_HELPER_HEADER, "")
+            line = line.replaceFirst(Regex("""^\[Python]\s+"""), "[Python] ").trim()
         }
 
         val matchResult = GAME_LOG.find(line)
         if (matchResult == null) {
-            // 如果是普通的 [Python] 开头的日志，剔除头部后返回
-            if (line.startsWith(PYTHON_HEADER)) {
-                val trimLine = line.substring(PYTHON_HEADER.length, line.length).trim()
-                val coloredLevel = getColoredLog(trimLine)
-                return "$coloredLevel$trimLine$RESET"
+            // 不带时间戳的 [Python] 行，或剥掉 [mc_helper] 后剩下的 mod 自定义日志
+            val displayLine = if (line.startsWith(PYTHON_HEADER)) {
+                line.substring(PYTHON_HEADER.length).trim()
+            } else {
+                line
             }
-            return null
+            val coloredLevel = getColoredLog(displayLine)
+            return "$coloredLevel$displayLine$RESET"
         }
 
         val rest = matchResult.groupValues[2]
@@ -233,7 +247,14 @@ class LogFilteredProcessHandler(commandLine: GeneralCommandLine, val options: MC
         return "$coloredLevel$trimLine$RESET"
     }
 
-    fun handleVerboseLog(line: String): String {
+    fun handleVerboseLog(lineInput: String): String {
+        // VERBOSE 模式下展示全部日志，但 [mc_helper] 标记本身不应出现在显示里
+        var line = lineInput
+        if (line.contains(MOD_HELPER_HEADER)) {
+            line = line.replace(MOD_HELPER_HEADER, "")
+            line = line.replaceFirst(Regex("""^\[Python]\s+"""), "[Python] ").trim()
+        }
+
         val sysLogMatch = SYS_LOG.find(line)
         if (sysLogMatch != null) {
             val level = sysLogMatch.groupValues[2]
