@@ -1,5 +1,6 @@
 package com.github.tartaricacid.mcshelper.util
 
+import com.google.gson.JsonElement
 import com.google.gson.JsonParser
 import com.intellij.openapi.diagnostic.Logger
 import java.nio.file.Files
@@ -126,8 +127,7 @@ class PackUtils {
             val uuid = header.get("uuid").asString
             val nameElement = header.get("name")
             val name = if (nameElement != null && !nameElement.isJsonNull) nameElement.asString else ""
-            val versionArray = header.getAsJsonArray("version")
-            val version = versionArray.joinToString(".") { it.asInt.toString() }
+            val version = parseVersion(header.get("version"))
 
             val modules = jsonObject.getAsJsonArray("modules")
             var packType: PackType? = null
@@ -144,6 +144,18 @@ class PackUtils {
                 PackInfo(packType, name, uuid, version, sourcePath)
             } else {
                 null
+            }
+        }
+
+        /**
+         * 兼容旧版 manifest 的数字数组版本和 format_version 3 使用的字符串版本。
+         */
+        private fun parseVersion(versionElement: JsonElement?): String {
+            require(versionElement != null && !versionElement.isJsonNull) { "manifest header.version 缺失" }
+            return when {
+                versionElement.isJsonArray -> versionElement.asJsonArray.joinToString(".") { it.asInt.toString() }
+                versionElement.isJsonPrimitive && versionElement.asJsonPrimitive.isString -> versionElement.asString
+                else -> throw IllegalArgumentException("manifest header.version 格式不受支持：$versionElement")
             }
         }
     }
