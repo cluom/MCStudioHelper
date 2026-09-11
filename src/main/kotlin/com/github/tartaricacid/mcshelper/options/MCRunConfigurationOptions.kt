@@ -20,6 +20,7 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     private val worldSeedProperty = property(Random.nextLong()).provideDelegate(this, "worldSeed")
     private val userNameProperty = string("DevOps").provideDelegate(this, "userName")
     private val skinFileNameProperty = string("").provideDelegate(this, "skinFileName")
+    private val skinModelProperty = enum(SkinModel.NORMAL).provideDelegate(this, "skinModel")
 
     private val gameModeProperty = enum(GameMode.CREATIVE).provideDelegate(this, "gameMode")
     private val levelTypeProperty = enum(LevelType.DEFAULT).provideDelegate(this, "levelType")
@@ -72,6 +73,10 @@ class MCRunConfigurationOptions : RunConfigurationOptions() {
     var skinFileName: String
         get() = skinFileNameProperty.getValue(this) ?: ""
         set(value) = skinFileNameProperty.setValue(this, value)
+
+    var skinModel: SkinModel
+        get() = skinModelProperty.getValue(this)
+        set(value) = skinModelProperty.setValue(this, value)
 
     var gameMode: GameMode
         get() = gameModeProperty.getValue(this)

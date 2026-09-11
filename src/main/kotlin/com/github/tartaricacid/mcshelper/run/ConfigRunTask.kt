@@ -266,7 +266,7 @@ class ConfigRunTask {
                     "user_name" to config.userName
                 ),
                 "skin_info" to mapOf(
-                    "slim" to false,
+                    "slim" to config.skinModel.isSlim,
                     "skin" to skinPath.toString()
                 )
             )

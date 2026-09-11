@@ -4,6 +4,7 @@ import com.github.tartaricacid.mcshelper.options.GameMode
 import com.github.tartaricacid.mcshelper.options.LevelType
 import com.github.tartaricacid.mcshelper.options.LogLevel
 import com.github.tartaricacid.mcshelper.options.PlayerPermissionLevel
+import com.github.tartaricacid.mcshelper.options.SkinModel
 import com.github.tartaricacid.mcshelper.run.MCRunConfiguration
 import com.github.tartaricacid.mcshelper.util.FileUtils
 import com.github.tartaricacid.mcshelper.util.PackUtils
@@ -88,6 +89,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
     private lateinit var userNameField: JBTextField
     private lateinit var skinList: JBList<String>
     private val skinListModel = DefaultListModel<String>()
+    private lateinit var skinModelField: ComboBox<SkinModel>
 
     private lateinit var gameModeField: ComboBox<GameMode>
     private lateinit var levelTypeField: ComboBox<LevelType>
@@ -195,7 +197,11 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
                     }
                     cell(scroll).align(Align.FILL)
                 }
-                row {
+                row("皮肤体型：") {
+                    skinModelField = comboBox(
+                        EnumComboBoxModel(SkinModel::class.java),
+                        textListCellRenderer { it?.displayName }
+                    ).component
                     button("导入皮肤...") { importSkin() }
                     button("打开目录") { openSkinsDirectory() }
                 }
@@ -308,6 +314,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         worldSeedField.text = config.options.worldSeed.toString()
         userNameField.text = config.options.userName
         refreshSkinList(config.options.skinFileName)
+        skinModelField.selectedItem = config.options.skinModel
 
         gameModeField.selectedItem = config.options.gameMode
         levelTypeField.selectedItem = config.options.levelType
@@ -374,6 +381,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
 
         config.options.userName = userNameField.text
         config.options.skinFileName = skinList.selectedValue?.takeUnless { it == SkinUtils.DEFAULT_SKIN_NAME }.orEmpty()
+        config.options.skinModel = skinModelField.selectedItem as SkinModel
 
         config.options.gameMode = gameModeField.selectedItem as GameMode
         config.options.levelType = levelTypeField.selectedItem as LevelType
