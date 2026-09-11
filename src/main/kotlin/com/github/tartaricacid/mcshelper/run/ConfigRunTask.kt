@@ -247,8 +247,13 @@ class ConfigRunTask {
             val skinPath = if (config.skinFileName.isBlank()) {
                 gamePath.parent.resolve("data/skin_packs/vanilla/steve.png")
             } else {
-                SkinUtils.resolveSkin(config.skinFileName)
+                val sourceSkin = SkinUtils.resolveSkin(config.skinFileName)
                     ?: throw ExecutionException("所选皮肤不存在：${config.skinFileName}，请在运行配置中重新选择")
+                try {
+                    SkinUtils.prepareSkinForLaunch(sourceSkin, worldFolderPath.resolve("mcs_helper_skin.png"))
+                } catch (e: Exception) {
+                    throw ExecutionException("准备所选皮肤失败：${e.message}", e)
+                }
             }
             val launchConfig = mapOf(
                 "world_info" to mapOf(

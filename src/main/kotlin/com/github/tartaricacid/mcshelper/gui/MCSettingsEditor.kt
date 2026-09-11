@@ -190,9 +190,12 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
                         visibleRowCount = 3
                     }
                     val scroll = JBScrollPane(skinList).apply {
-                        preferredSize = java.awt.Dimension(0, 72)
+                        preferredSize = java.awt.Dimension(400, 72)
+                        minimumSize = java.awt.Dimension(240, 72)
                     }
                     cell(scroll).align(Align.FILL)
+                }
+                row {
                     button("导入皮肤...") { importSkin() }
                     button("打开目录") { openSkinsDirectory() }
                 }
