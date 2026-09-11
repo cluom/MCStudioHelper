@@ -244,6 +244,12 @@ class ConfigRunTask {
 
             // 开始写启动参数文件
             val launchConfigPath = worldFolderPath.resolve("launch_config.cppconfig")
+            val skinPath = if (config.skinFileName.isBlank()) {
+                gamePath.parent.resolve("data/skin_packs/vanilla/steve.png")
+            } else {
+                SkinUtils.resolveSkin(config.skinFileName)
+                    ?: throw ExecutionException("所选皮肤不存在：${config.skinFileName}，请在运行配置中重新选择")
+            }
             val launchConfig = mapOf(
                 "world_info" to mapOf(
                     "level_id" to config.worldFolderName,
@@ -256,7 +262,7 @@ class ConfigRunTask {
                 ),
                 "skin_info" to mapOf(
                     "slim" to false,
-                    "skin" to gamePath.parent.resolve("data/skin_packs/vanilla/steve.png").toString()
+                    "skin" to skinPath.toString()
                 )
             )
             Files.newBufferedWriter(launchConfigPath).use { writer ->

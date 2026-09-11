@@ -8,12 +8,14 @@ import com.github.tartaricacid.mcshelper.run.MCRunConfiguration
 import com.github.tartaricacid.mcshelper.util.FileUtils
 import com.github.tartaricacid.mcshelper.util.PackUtils
 import com.github.tartaricacid.mcshelper.util.PathUtils
+import com.github.tartaricacid.mcshelper.util.SkinUtils
 import com.intellij.icons.AllIcons
 import com.intellij.ide.actions.RevealFileAction
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.options.ConfigurationException
 import com.intellij.openapi.options.SettingsEditor
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.fileChooser.FileChooser
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.Messages
 import com.intellij.ui.CheckBoxList
@@ -21,6 +23,7 @@ import com.intellij.ui.EnumComboBoxModel
 import com.intellij.ui.TextFieldWithHistoryWithBrowseButton
 import com.intellij.ui.components.ActionLink
 import com.intellij.ui.components.JBCheckBox
+import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
 import com.intellij.ui.components.textFieldWithHistoryWithBrowseButton
@@ -36,6 +39,8 @@ import java.nio.file.Paths
 import java.util.UUID
 import javax.swing.JButton
 import javax.swing.JComponent
+import javax.swing.DefaultListModel
+import javax.swing.ListSelectionModel
 import javax.swing.JPanel
 import kotlin.random.Random
 
@@ -81,6 +86,8 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
 
     private lateinit var worldSeedField: JBTextField
     private lateinit var userNameField: JBTextField
+    private lateinit var skinList: JBList<String>
+    private val skinListModel = DefaultListModel<String>()
 
     private lateinit var gameModeField: ComboBox<GameMode>
     private lateinit var levelTypeField: ComboBox<LevelType>
@@ -175,6 +182,19 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
                 row("用户名称：") {
                     userNameField = textField().align(Align.FILL).component
                     userNameField.emptyText.text = "DevOps"
+                }
+
+                row("玩家皮肤：") {
+                    skinList = JBList(skinListModel).apply {
+                        selectionMode = ListSelectionModel.SINGLE_SELECTION
+                        visibleRowCount = 3
+                    }
+                    val scroll = JBScrollPane(skinList).apply {
+                        preferredSize = java.awt.Dimension(0, 72)
+                    }
+                    cell(scroll).align(Align.FILL)
+                    button("导入皮肤...") { importSkin() }
+                    button("打开目录") { openSkinsDirectory() }
                 }
 
                 groupRowsRange("游戏规则：", true, false) {
@@ -284,6 +304,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
 
         worldSeedField.text = config.options.worldSeed.toString()
         userNameField.text = config.options.userName
+        refreshSkinList(config.options.skinFileName)
 
         gameModeField.selectedItem = config.options.gameMode
         levelTypeField.selectedItem = config.options.levelType
@@ -349,6 +370,7 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         config.options.worldSeed = worldSeedField.text.toLong()
 
         config.options.userName = userNameField.text
+        config.options.skinFileName = skinList.selectedValue?.takeUnless { it == SkinUtils.DEFAULT_SKIN_NAME }.orEmpty()
 
         config.options.gameMode = gameModeField.selectedItem as GameMode
         config.options.levelType = levelTypeField.selectedItem as LevelType
@@ -371,6 +393,46 @@ class MCSettingsEditor : SettingsEditor<MCRunConfiguration>() {
         for (entry in flatLayersCurrent.asReversed()) {
             val (n, c) = parseLayerEntry(entry) ?: continue
             flatLayersPreviewModel.addRow(arrayOf<Any>(n, c.toString()))
+        }
+    }
+
+    private fun refreshSkinList(selectedFileName: String = "") {
+        skinListModel.clear()
+        skinListModel.addElement(SkinUtils.DEFAULT_SKIN_NAME)
+        try {
+            SkinUtils.listSkinFileNames().forEach(skinListModel::addElement)
+        } catch (e: Exception) {
+            logger.warn("读取皮肤目录失败：${e.message}", e)
+        }
+        val selection = selectedFileName.takeIf { skinListModel.contains(it) } ?: SkinUtils.DEFAULT_SKIN_NAME
+        skinList.setSelectedValue(selection, true)
+    }
+
+    private fun importSkin() {
+        val descriptor = FileChooserDescriptorFactory.singleFile()
+            .withTitle("导入玩家皮肤")
+            .withDescription("选择 PNG 皮肤文件；文件名将作为皮肤名称")
+            .withExtensionFilter("png")
+        val selected = FileChooser.chooseFile(descriptor, null, null) ?: return
+        try {
+            val fileName = SkinUtils.importSkin(Paths.get(selected.path))
+            refreshSkinList(fileName)
+        } catch (e: java.nio.file.FileAlreadyExistsException) {
+            Messages.showErrorDialog("同名皮肤已存在，请先重命名要导入的文件。", "导入皮肤失败")
+        } catch (e: Exception) {
+            logger.warn("导入皮肤失败：${e.message}", e)
+            Messages.showErrorDialog(e.message ?: "无法导入皮肤", "导入皮肤失败")
+        }
+    }
+
+    private fun openSkinsDirectory() {
+        try {
+            val dir = SkinUtils.skinsDir()
+            Files.createDirectories(dir)
+            RevealFileAction.openDirectory(dir.toFile())
+        } catch (e: Exception) {
+            logger.warn("打开皮肤目录失败：${e.message}", e)
+            Messages.showErrorDialog(e.message ?: "无法打开皮肤目录", "打开目录失败")
         }
     }
 
