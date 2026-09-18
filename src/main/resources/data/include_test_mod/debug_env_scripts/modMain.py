@@ -17,20 +17,29 @@ class STD_OUT_WRAPPER(object):
         return getattr(self.baseIO, name)
 
     def write(self, text):
+        # Keep incomplete writes as bytes: Py2 mixed str/unicode join implicitly
+        # decodes the whole buffer and can poison every following log record.
+        if isinstance(text, type(u"")):
+            text = text.encode("utf-8")
+        elif not isinstance(text, bytes):
+            text = str(text).encode("utf-8")
         self._buffer.append(text)
-        buf = "".join(self._buffer)
+        buf = b"".join(self._buffer)
 
-        if "\n" not in buf:
+        if b"\n" not in buf:
             return
 
-        lines = buf.split("\n")
+        lines = buf.split(b"\n")
         self._buffer = [lines.pop()]
 
         for line in lines:
-            if line.strip() == "":
-                self.baseIO.write("\n")
+            # Decode only complete lines, so split UTF-8 characters stay intact.
+            # Invalid foreign log bytes cannot break subsequent game logging.
+            line = line.decode("utf-8", "replace").encode("utf-8")
+            if not line.strip():
+                self.baseIO.write(b"\n")
             else:
-                self.baseIO.write("[Python] " + line + "\n")
+                self.baseIO.write(b"[Python] " + line + b"\n")
 
     def close(self):
         return self.baseIO.close()
